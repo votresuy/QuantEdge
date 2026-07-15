@@ -1,0 +1,3 @@
+2026-07-14 20:11:33,878 | INFO | long_term_engine | [long_term] EURUSD signal=SignalAction.NO_TRADE confidence=40.28
+2026-07-14 20:11:33,880 | INFO | short_term_engine | [short_term] EURUSD signal=SignalAction.BUY confidence=97.88
+2026-07-14 20:11:40,414 | INFO | long_term_engine | [long_term] NIFTY50 index trend=TrendDirection.BEARISH confidence=100
