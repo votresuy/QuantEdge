@@ -63,6 +63,7 @@ class TradeSignal(BaseModel):
     confidence: float = Field(ge=0, le=100)
     trend: TrendDirection
     indicators: dict = Field(default_factory=dict)
+    status: Literal["RUNNING", "WIN", "LOSS", "N/A"] = "N/A"
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
