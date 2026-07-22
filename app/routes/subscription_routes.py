@@ -14,8 +14,17 @@ async def get_plans():
 
 @router.get("/status")
 async def get_status(user: dict = Depends(get_current_user)):
-    active = await subscription_service.is_active(user["uid"])
-    return {"is_active": active, "plan": user.get("subscription_plan"), "expiry": user.get("subscription_expiry")}
+    is_paid = await subscription_service.is_paid_active(user["uid"])
+    is_trial = await subscription_service.is_trial_active(user["uid"])
+    return {
+        "is_active": is_paid or is_trial,
+        "is_paid_subscriber": is_paid,
+        "is_on_trial": is_trial,
+        "plan": user.get("subscription_plan"),
+        "subscription_expiry": user.get("subscription_expiry"),
+        "trial_expiry": user.get("trial_expiry"),
+        "free_instruments": sorted(subscription_service.FREE_INSTRUMENTS),
+    }
 
 
 @router.post("/create-order", response_model=CreateOrderResponse)
@@ -34,3 +43,8 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
     body = await request.body()
     event_data = await request.json()
     return await payment_service.handle_webhook(body, x_razorpay_signature, event_data)
+
+
+@router.get("/payment-history")
+async def payment_history(user: dict = Depends(get_current_user)):
+    return payment_service.get_payment_history(user["uid"])
