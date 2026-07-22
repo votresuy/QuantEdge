@@ -16,7 +16,7 @@ from app.firebase.firebase_init import init_firebase
 from app.market.scheduler import start_scheduler, stop_scheduler
 from app.utils.logger import get_logger
 
-from app.routes import auth_routes, signal_routes, history_routes, subscription_routes, admin_routes
+from app.routes import auth_routes, signal_routes, history_routes, subscription_routes, admin_routes, notification_routes
 
 logger = get_logger("main")
 
@@ -55,6 +55,7 @@ app.include_router(signal_routes.router, prefix=settings.API_V1_PREFIX)
 app.include_router(history_routes.router, prefix=settings.API_V1_PREFIX)
 app.include_router(subscription_routes.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin_routes.router, prefix=settings.API_V1_PREFIX)
+app.include_router(notification_routes.router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/")
