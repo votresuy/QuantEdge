@@ -11,13 +11,14 @@ logger = get_logger("razorpay_client")
 client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
 
 
-def create_order(amount_inr: int, receipt: str) -> dict:
+def create_order(amount_inr: int, receipt: str, notes: dict | None = None) -> dict:
     """amount_inr is in rupees; Razorpay expects paise."""
     order = client.order.create({
         "amount": amount_inr * 100,
         "currency": "INR",
         "receipt": receipt,
         "payment_capture": 1,
+        "notes": notes or {},
     })
     return order
 
