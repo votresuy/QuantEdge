@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     SHORT_TERM_ENGINE_INTERVAL_MINUTES: int = 15  # runs every 15 min
 
     # ---------- CORS ----------
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000"]
+    ALLOWED_ORIGINS: List[str] = ["https://greater-trade.vercel.app"]
 
     # ---------- Logging ----------
     LOG_LEVEL: str = "INFO"
