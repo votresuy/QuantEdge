@@ -1,25 +1,21 @@
 """
 FastAPI application entry point.
-
 Startup sequence:
   1. Initialize Firebase (Firestore + Auth)
   2. Register routes
   3. Start the background scheduler (market polling + engines)
 """
-
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-
 from app.config import settings
 from app.firebase.firebase_init import init_firebase
 from app.market.scheduler import start_scheduler, stop_scheduler
 from app.utils.logger import get_logger
-
 from app.routes import auth_routes, signal_routes, history_routes, subscription_routes, admin_routes, notification_routes
 
 logger = get_logger("main")
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,13 +24,10 @@ async def lifespan(app: FastAPI):
         init_firebase()
     except Exception as e:
         logger.error(f"Firebase init failed on startup: {e}")
-
     start_scheduler()
     yield
-
     logger.info("Shutting down backend...")
     stop_scheduler()
-
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -50,6 +43,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 👇 YAHAN ADD KARNA HAI — middleware ke baad, routes se pehle ya baad, dono chalega
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
 app.include_router(auth_routes.router, prefix=settings.API_V1_PREFIX)
 app.include_router(signal_routes.router, prefix=settings.API_V1_PREFIX)
 app.include_router(history_routes.router, prefix=settings.API_V1_PREFIX)
@@ -57,11 +59,9 @@ app.include_router(subscription_routes.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin_routes.router, prefix=settings.API_V1_PREFIX)
 app.include_router(notification_routes.router, prefix=settings.API_V1_PREFIX)
 
-
 @app.get("/")
 async def root():
     return {"status": "ok", "service": settings.APP_NAME}
-
 
 @app.get("/health")
 async def health():
