@@ -2,10 +2,13 @@
 Firebase Admin SDK initialization — used for Firestore (data) and
 Firebase Authentication (optional, if not using pure JWT).
 
-Place your service account JSON at the path in settings.FIREBASE_CREDENTIALS_PATH.
-Never commit this file to version control.
+Credentials are loaded from the FIREBASE_SERVICE_ACCOUNT_JSON environment
+variable (full JSON content as a string). Falls back to a local file path
+(settings.FIREBASE_CREDENTIALS_PATH) for local development.
+Never commit the actual credentials file to version control.
 """
-
+import json
+import os
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
 from app.config import settings
@@ -21,9 +24,14 @@ def init_firebase():
     global _app, _db
     if _app is not None:
         return _app
-
     try:
-        cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+        firebase_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+        if firebase_json:
+            cred_dict = json.loads(firebase_json)
+            cred = credentials.Certificate(cred_dict)
+        else:
+            cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+
         _app = firebase_admin.initialize_app(cred, {"projectId": settings.FIREBASE_PROJECT_ID})
         _db = firestore.client()
         logger.info("Firebase initialized successfully")
