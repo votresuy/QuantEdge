@@ -53,6 +53,13 @@ def update_history_status(history_doc_id: str, status: str, closed_price: Option
     db.collection(HISTORY_COLLECTION).document(history_doc_id).update(update)
 
 
+def update_history_ai_analysis(history_doc_id: str, ai_analysis: dict):
+    """Patches in the real AI-generated analysis once ready, replacing the
+    instant rule-based fallback that was saved when the signal first fired."""
+    db = get_firestore()
+    db.collection(HISTORY_COLLECTION).document(history_doc_id).update({"ai_analysis": ai_analysis})
+
+
 def get_live_signal(instrument: str) -> Optional[dict]:
     db = get_firestore()
     doc = db.collection(SIGNALS_COLLECTION).document(instrument).get()
