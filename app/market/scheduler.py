@@ -13,15 +13,40 @@ BUY/SELL signals, and a broadcast notification is dispatched for
 high-confidence signals.
 """
 
+"""
+Scheduler Service — Step 1 + pipeline orchestration.
+
+  Every Minute      -> refresh market data (Market Data Service)
+  Every 5 Minutes    -> check open positions for Win/Loss outcome
+  Every 60 Minutes  -> run Long-Term Engine (daily trend + 1H entry)
+  Every 15 Minutes  -> run Short-Term Engine (4H trend + 15M entry)
+  Every 24 Hours    -> check for expiring subscriptions/trials, send reminders
+
+Both engines' output is saved and broadcast IMMEDIATELY with an instant,
+rule-based "preliminary" analysis (see build_fallback_analysis) — trade
+signals are never delayed or blocked by the AI Analysis Engine. The real
+AI-generated narration is then fetched in the background and patches the
+signal (cache + Firestore live + history) in place once it's ready. A slow
+or unavailable Anthropic API can never hold up a signal going out.
+"""
+
+import asyncio
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.config import settings
 from app.market.market_data_service import market_data_service
 from app.engines.long_term.output import run_long_term_engine
 from app.engines.short_term.output import run_short_term_engine
-from app.engines.ai.insight import generate_ai_analysis
-from app.firebase.firestore_repo import save_live_signal, append_history, get_all_users, save_user
+from app.engines.ai.insight import generate_ai_analysis, build_fallback_analysis
+from app.firebase.firestore_repo import (
+    save_live_signal,
+    append_history,
+    update_history_ai_analysis,
+    get_all_users,
+    save_user,
+)
 from app.services.tracking_service import register_open_position, check_open_positions
+from app.services.signal_cache_service import signal_cache_service
 from app.schemas.market import AssetType, IndexTrendSignal
 from app.utils.logger import get_logger
 
@@ -32,17 +57,40 @@ scheduler = AsyncIOScheduler()
 EXPIRY_REMINDER_DAYS = 2
 
 
+async def _enrich_with_real_ai(result, instrument: str, history_doc_id: str):
+    """Background task: fetches the real AI narration and patches it into the
+    already-published signal. Runs independently of the main publish path, so
+    it can take as long as it needs without delaying any trade signal."""
+    try:
+        ai_analysis = await generate_ai_analysis(result)
+        ai_data = ai_analysis.model_dump(mode="json")
+
+        cached = signal_cache_service.get(instrument)
+        if cached:
+            cached["ai_analysis"] = ai_data
+            signal_cache_service.set(instrument, cached)
+            save_live_signal(instrument, cached)
+
+        update_history_ai_analysis(history_doc_id, ai_data)
+        logger.info(f"AI analysis enriched for {instrument} (history doc {history_doc_id})")
+    except Exception as e:
+        logger.error(f"Background AI enrichment failed for {instrument}: {e}")
+
+
 async def _persist_and_notify(result):
     data = result.model_dump(mode="json")
 
-    ai_analysis = await generate_ai_analysis(result)
-    data["ai_analysis"] = ai_analysis.model_dump(mode="json")
+    # Publish immediately with an instant, rule-based analysis — never wait on
+    # the Anthropic API before a signal goes live.
+    fallback_analysis = build_fallback_analysis(result)
+    data["ai_analysis"] = fallback_analysis.model_dump(mode="json")
 
     # Initial outcome status — RUNNING for tradeable BUY/SELL signals, N/A otherwise
     # (NO_TRADE, or index trend signals which have no entry/SL/TP to track).
     data["status"] = "RUNNING" if data.get("signal") in ("BUY", "SELL") else "N/A"
 
     save_live_signal(result.instrument, data)
+    signal_cache_service.set(result.instrument, data)
     history_doc_id = append_history(result.instrument, data)
 
     if not isinstance(result, IndexTrendSignal) and result.signal.value != "NO_TRADE":
@@ -52,6 +100,10 @@ async def _persist_and_notify(result):
         await notification_service.notify_new_signal(
             result.instrument, result.signal.value, result.confidence
         )
+
+    # Fire-and-forget: real AI narration replaces the fallback text once ready,
+    # without blocking this instrument or delaying the next one in the cycle.
+    asyncio.create_task(_enrich_with_real_ai(result, result.instrument, history_doc_id))
 
 
 async def poll_market_data():
