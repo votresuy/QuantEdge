@@ -85,4 +85,5 @@ class AIAnalysis(BaseModel):
     risk_summary: str
     why_buy: Optional[str] = None
     why_sell: Optional[str] = None
+    is_preliminary: bool = False  # True = instant rule-based text, real AI narration still pending
     generated_at: datetime = Field(default_factory=datetime.utcnow)
